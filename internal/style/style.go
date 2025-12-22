@@ -43,23 +43,3 @@ var (
 	// ArrowPrefix for action indicators
 	ArrowPrefix = Info.Render("→")
 )
-
-// RenderSuccess formats a success message
-func RenderSuccess(msg string) string {
-	return SuccessPrefix + " " + msg
-}
-
-// RenderWarning formats a warning message
-func RenderWarning(msg string) string {
-	return WarningPrefix + " " + msg
-}
-
-// RenderError formats an error message
-func RenderError(msg string) string {
-	return ErrorPrefix + " " + msg
-}
-
-// RenderInfo formats an info message with arrow
-func RenderInfo(msg string) string {
-	return ArrowPrefix + " " + msg
-}
