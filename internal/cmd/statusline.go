@@ -158,7 +158,7 @@ func runMayorStatusLine(t *tmux.Tmux) error {
 
 	// Build status
 	var parts []string
-	parts = append(parts, fmt.Sprintf("%s %d 😺", AgentTypeIcons[AgentMayor], polecatCount))
+	parts = append(parts, fmt.Sprintf("%d 😺", polecatCount))
 	parts = append(parts, fmt.Sprintf("%d rigs", rigCount))
 	if unread > 0 {
 		if subject != "" {
@@ -202,7 +202,7 @@ func runDeaconStatusLine(t *tmux.Tmux) error {
 
 	// Build status
 	var parts []string
-	parts = append(parts, fmt.Sprintf("%s %d rigs", AgentTypeIcons[AgentDeacon], rigCount))
+	parts = append(parts, fmt.Sprintf("%d rigs", rigCount))
 	parts = append(parts, fmt.Sprintf("%d 😺", polecatCount))
 	if unread > 0 {
 		if subject != "" {
@@ -254,7 +254,7 @@ func runWitnessStatusLine(t *tmux.Tmux, rigName string) error {
 
 	// Build status
 	var parts []string
-	parts = append(parts, fmt.Sprintf("%s %d 😺", AgentTypeIcons[AgentWitness], polecatCount))
+	parts = append(parts, fmt.Sprintf("%d 😺", polecatCount))
 	if crewCount > 0 {
 		parts = append(parts, fmt.Sprintf("%d crew", crewCount))
 	}
@@ -320,16 +320,15 @@ func runRefineryStatusLine(rigName string) error {
 
 	// Build status
 	var parts []string
-	icon := AgentTypeIcons[AgentRefinery]
 	if currentItem != "" {
-		parts = append(parts, fmt.Sprintf("%s merging %s", icon, currentItem))
+		parts = append(parts, fmt.Sprintf("merging %s", currentItem))
 		if pending > 0 {
 			parts = append(parts, fmt.Sprintf("+%d queued", pending))
 		}
 	} else if pending > 0 {
-		parts = append(parts, fmt.Sprintf("%s %d queued", icon, pending))
+		parts = append(parts, fmt.Sprintf("%d queued", pending))
 	} else {
-		parts = append(parts, fmt.Sprintf("%s idle", icon))
+		parts = append(parts, "idle")
 	}
 
 	if unread > 0 {
