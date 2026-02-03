@@ -17,6 +17,12 @@ type AgentPreset string
 const (
 	// AgentClaude is Claude Code (default).
 	AgentClaude AgentPreset = "claude"
+	// AgentClaudeOpus is Claude Code with Opus model (oversight roles).
+	AgentClaudeOpus AgentPreset = "claude-opus"
+	// AgentClaudeSonnet is Claude Code with Sonnet model (execution roles).
+	AgentClaudeSonnet AgentPreset = "claude-sonnet"
+	// AgentClaudeHaiku is Claude Code with Haiku model (lightweight tasks).
+	AgentClaudeHaiku AgentPreset = "claude-haiku"
 	// AgentGemini is Gemini CLI.
 	AgentGemini AgentPreset = "gemini"
 	// AgentCodex is OpenAI Codex.
@@ -116,6 +122,42 @@ var builtinPresets = map[AgentPreset]*AgentPresetInfo{
 		SupportsHooks:       true,
 		SupportsForkSession: true,
 		NonInteractive:      nil, // Claude is native non-interactive
+	},
+	AgentClaudeOpus: {
+		Name:                AgentClaudeOpus,
+		Command:             "claude",
+		Args:                []string{"--dangerously-skip-permissions", "--model", "opus"},
+		ProcessNames:        []string{"node", "claude"},
+		SessionIDEnv:        "CLAUDE_SESSION_ID",
+		ResumeFlag:          "--resume",
+		ResumeStyle:         "flag",
+		SupportsHooks:       true,
+		SupportsForkSession: true,
+		NonInteractive:      nil,
+	},
+	AgentClaudeSonnet: {
+		Name:                AgentClaudeSonnet,
+		Command:             "claude",
+		Args:                []string{"--dangerously-skip-permissions", "--model", "sonnet"},
+		ProcessNames:        []string{"node", "claude"},
+		SessionIDEnv:        "CLAUDE_SESSION_ID",
+		ResumeFlag:          "--resume",
+		ResumeStyle:         "flag",
+		SupportsHooks:       true,
+		SupportsForkSession: true,
+		NonInteractive:      nil,
+	},
+	AgentClaudeHaiku: {
+		Name:                AgentClaudeHaiku,
+		Command:             "claude",
+		Args:                []string{"--dangerously-skip-permissions", "--model", "haiku"},
+		ProcessNames:        []string{"node", "claude"},
+		SessionIDEnv:        "CLAUDE_SESSION_ID",
+		ResumeFlag:          "--resume",
+		ResumeStyle:         "flag",
+		SupportsHooks:       true,
+		SupportsForkSession: true,
+		NonInteractive:      nil,
 	},
 	AgentGemini: {
 		Name:                AgentGemini,
@@ -369,9 +411,9 @@ func RuntimeConfigFromPreset(preset AgentPreset) *RuntimeConfig {
 		Env:     envCopy,
 	}
 
-	// Resolve command path for claude preset (handles alias installations)
+	// Resolve command path for claude-based presets (handles alias installations)
 	// Uses resolveClaudePath() from types.go which finds ~/.claude/local/claude
-	if preset == AgentClaude && rc.Command == "claude" {
+	if rc.Command == "claude" {
 		rc.Command = resolveClaudePath()
 	}
 

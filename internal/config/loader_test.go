@@ -1155,6 +1155,7 @@ func TestBuildAgentStartupCommandWithAgentOverride(t *testing.T) {
 
 	townSettings := NewTownSettings()
 	townSettings.DefaultAgent = "gemini"
+	townSettings.RoleAgents = nil // Clear default role_agents to test DefaultAgent fallback
 	if err := SaveTownSettings(TownSettingsPath(townRoot), townSettings); err != nil {
 		t.Fatalf("SaveTownSettings: %v", err)
 	}
@@ -1236,6 +1237,7 @@ func TestBuildStartupCommand_UsesRigAgentWhenRigPathProvided(t *testing.T) {
 
 	townSettings := NewTownSettings()
 	townSettings.DefaultAgent = "gemini"
+	townSettings.RoleAgents = nil // Clear default role_agents to test rig Agent fallback
 	if err := SaveTownSettings(TownSettingsPath(townRoot), townSettings); err != nil {
 		t.Fatalf("SaveTownSettings: %v", err)
 	}
@@ -2624,16 +2626,16 @@ func TestMultipleAgentTypes(t *testing.T) {
 	}
 }
 
-// TestCustomClaudeVariants tests that Claude model variants (opus, sonnet, haiku) need
-// to be explicitly defined as custom agents since they are NOT built-in presets.
+// TestCustomClaudeVariants tests that Claude model variants (opus, sonnet, haiku) are
+// built-in presets and can be overridden with custom configurations.
 func TestCustomClaudeVariants(t *testing.T) {
 	t.Parallel()
 
-	// Verify that claude-opus/sonnet/haiku are NOT built-in presets
+	// Verify that claude-opus/sonnet/haiku ARE built-in presets (added in role-based tiering)
 	variants := []string{"claude-opus", "claude-sonnet", "claude-haiku"}
 	for _, variant := range variants {
-		if preset := GetAgentPresetByName(variant); preset != nil {
-			t.Errorf("%s should NOT be a built-in preset (only 'claude' is), but GetAgentPresetByName returned non-nil", variant)
+		if preset := GetAgentPresetByName(variant); preset == nil {
+			t.Errorf("%s should be a built-in preset, but GetAgentPresetByName returned nil", variant)
 		}
 	}
 

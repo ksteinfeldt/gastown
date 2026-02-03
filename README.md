@@ -429,6 +429,77 @@ MEOW is the recommended pattern:
 6. **Progress monitoring** - Track through convoy status
 7. **Completion** - Mayor summarizes results
 
+## Hybrid Multi-Model Backend (Experimental)
+
+Gas Town supports routing lightweight tasks to direct API calls while reserving CLI agents (Claude Code) for complex multi-step work. This can improve performance and reduce costs.
+
+### Enabling Hybrid Backend
+
+Create `~/gt/settings/backend.json`:
+
+```json
+{
+  "type": "backend-config",
+  "version": 1,
+  "enabled": true,
+  "default_backend": "claude",
+  "cost_threshold": 0.50,
+  "token_threshold": 50000,
+  "fallback_to_cli": true,
+  "backends": {
+    "claude": {
+      "enabled": true,
+      "default_model": "claude-haiku-3-5-20241022",
+      "api_key_env": "ANTHROPIC_API_KEY"
+    },
+    "openai": {
+      "enabled": false,
+      "default_model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "grok": {
+      "enabled": false,
+      "default_model": "grok-3-mini",
+      "api_key_env": "XAI_API_KEY"
+    }
+  }
+}
+```
+
+### Environment Variables
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...  # For Claude API backend
+export OPENAI_API_KEY=sk-...          # For OpenAI API backend
+export XAI_API_KEY=xai-...            # For Grok API backend
+```
+
+### Model Routing
+
+Tasks are routed based on:
+
+1. **Model tags** - Add `model:grok-fast` label to beads for explicit routing
+2. **Tier hints** - Use `Tier: haiku|sonnet|opus` in molecule steps
+3. **Thresholds** - Tasks exceeding token/cost thresholds route to CLI
+
+### Supported Tiers
+
+| Tier | Backend | Model |
+|------|---------|-------|
+| `haiku` | claude | claude-haiku-3-5-20241022 |
+| `sonnet` | claude | claude-sonnet-4-20250514 |
+| `opus` | claude | claude-opus-4-5-20251101 |
+| `grok-fast` | grok | grok-3-mini |
+| `grok` | grok | grok-3 |
+| `gpt4` | openai | gpt-4o |
+| `o1` | openai | o1 |
+| `o3-mini` | openai | o3-mini |
+
+### When to Use
+
+- **API Backend**: Simple classification, summarization, formatting tasks
+- **CLI Agent**: Complex multi-step coding, file operations, tool use
+
 ## Shell Completions
 
 ```bash

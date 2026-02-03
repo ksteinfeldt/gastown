@@ -96,6 +96,7 @@ var (
 	slingForce    bool   // --force: force spawn even if polecat has unread mail
 	slingAccount  string // --account: Claude Code account handle to use
 	slingAgent    string // --agent: override runtime agent for this sling/spawn
+	slingTier     string // --tier: model tier shorthand (opus|sonnet|haiku)
 	slingNoConvoy bool   // --no-convoy: skip auto-convoy creation
 	slingNoMerge  bool   // --no-merge: skip merge queue on completion (for upstream PRs/human review)
 	slingNoBoot   bool   // --no-boot: skip waking witness+refinery after dispatch (G11)
@@ -114,6 +115,7 @@ func init() {
 	slingCmd.Flags().BoolVar(&slingForce, "force", false, "Force spawn even if polecat has unread mail")
 	slingCmd.Flags().StringVar(&slingAccount, "account", "", "Claude Code account handle to use")
 	slingCmd.Flags().StringVar(&slingAgent, "agent", "", "Override agent/runtime for this sling (e.g., claude, gemini, codex, or custom alias)")
+	slingCmd.Flags().StringVar(&slingTier, "tier", "", "Model tier shorthand: opus (complex), sonnet (standard), haiku (lightweight)")
 	slingCmd.Flags().BoolVar(&slingNoConvoy, "no-convoy", false, "Skip auto-convoy creation for single-issue sling")
 	slingCmd.Flags().BoolVar(&slingHookRawBead, "hook-raw-bead", false, "Hook raw bead without default formula (expert mode)")
 	slingCmd.Flags().BoolVar(&slingNoMerge, "no-merge", false, "Skip merge queue on completion (keep work on feature branch for review)")
@@ -126,6 +128,23 @@ func runSling(cmd *cobra.Command, args []string) error {
 	// Polecats cannot sling - check early before writing anything
 	if polecatName := os.Getenv("GT_POLECAT"); polecatName != "" {
 		return fmt.Errorf("polecats cannot sling (use gt done for handoff)")
+	}
+
+	// Map --tier to --agent (syntactic sugar for claude model tiers)
+	if slingTier != "" {
+		if slingAgent != "" {
+			return fmt.Errorf("cannot use both --tier and --agent flags")
+		}
+		switch strings.ToLower(slingTier) {
+		case "opus":
+			slingAgent = "claude-opus"
+		case "sonnet":
+			slingAgent = "claude-sonnet"
+		case "haiku":
+			slingAgent = "claude-haiku"
+		default:
+			return fmt.Errorf("invalid tier '%s': must be opus, sonnet, or haiku", slingTier)
+		}
 	}
 
 	// Get town root early - needed for BEADS_DIR when running bd commands
@@ -193,6 +212,20 @@ func runSling(cmd *cobra.Command, args []string) error {
 				// Neither bead nor formula
 				return fmt.Errorf("'%s' is not a valid bead or formula", firstArg)
 			}
+		}
+	}
+
+	// Check if this bead should be handled by API backend (hybrid routing).
+	// This is an opt-in feature controlled by settings/backend.json.
+	// If the bead is successfully handled by API, we return early.
+	if beadID != "" && !slingDryRun {
+		handled, err := TryAPIBackendForBead(beadID, townRoot, "")
+		if err != nil {
+			return fmt.Errorf("API backend error: %w", err)
+		}
+		if handled {
+			// Bead was completed via API backend - no CLI dispatch needed
+			return nil
 		}
 	}
 
