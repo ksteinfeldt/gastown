@@ -20,6 +20,7 @@ import (
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/protocol"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/slack"
 )
 
 // MergeQueueConfig holds configuration for the merge queue processor.
@@ -496,6 +497,14 @@ func (e *Engineer) handleSuccess(mr *beads.Issue, result ProcessResult) {
 
 	// 6. Log success
 	_, _ = fmt.Fprintf(e.output, "[Engineer] ✓ Merged: %s (commit: %s)\n", mr.ID, result.MergeCommit)
+
+	// Send Slack notification for successful merge
+	slack.Notify(slack.EventJobCompleted, map[string]string{
+		slack.FieldBead:   mrFields.SourceIssue,
+		slack.FieldMR:     mr.ID,
+		slack.FieldBranch: mrFields.Branch,
+		slack.FieldCommit: result.MergeCommit,
+	})
 }
 
 // syncCrewWorkspaces pulls latest changes to all crew workspaces.
@@ -634,6 +643,14 @@ func (e *Engineer) HandleMRInfoSuccess(mr *MRInfo, result ProcessResult) {
 
 	// 3. Log success
 	_, _ = fmt.Fprintf(e.output, "[Engineer] ✓ Merged: %s (commit: %s)\n", mr.ID, result.MergeCommit)
+
+	// Send Slack notification for successful merge
+	slack.Notify(slack.EventJobCompleted, map[string]string{
+		slack.FieldBead:   mr.SourceIssue,
+		slack.FieldMR:     mr.ID,
+		slack.FieldBranch: mr.Branch,
+		slack.FieldCommit: result.MergeCommit,
+	})
 }
 
 // HandleMRInfoFailure handles a failed merge from MRInfo.
@@ -654,6 +671,14 @@ func (e *Engineer) HandleMRInfoFailure(mr *MRInfo, result ProcessResult) {
 	} else {
 		fmt.Fprintf(e.output, "[Engineer] Notified witness of merge failure for %s\n", mr.Worker)
 	}
+
+	// Send Slack notification for merge failure
+	slack.Notify(slack.EventJobFailed, map[string]string{
+		slack.FieldBead:   mr.SourceIssue,
+		slack.FieldMR:     mr.ID,
+		slack.FieldReason: failureType,
+		slack.FieldError:  result.Error,
+	})
 
 	// If this was a conflict, create a conflict-resolution task for dispatch
 	// and block the MR until the task is resolved (non-blocking delegation)

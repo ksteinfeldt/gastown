@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/cli"
 	"github.com/steveyegge/gastown/internal/config"
+	"github.com/steveyegge/gastown/internal/slack"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/ui"
 	"github.com/steveyegge/gastown/internal/version"
@@ -90,6 +91,11 @@ func persistentPreRun(cmd *cobra.Command, args []string) error {
 
 	// Initialize CLI theme (dark/light mode support)
 	initCLITheme()
+
+	// Initialize Slack notifications (silent, non-blocking)
+	if townRoot, err := workspace.FindFromCwd(); err == nil {
+		_ = slack.Initialize(townRoot)
+	}
 
 	// Get the root command name being run
 	cmdName := cmd.Name()

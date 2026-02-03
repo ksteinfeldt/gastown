@@ -12,6 +12,7 @@ import (
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/events"
 	"github.com/steveyegge/gastown/internal/mail"
+	"github.com/steveyegge/gastown/internal/slack"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
@@ -578,6 +579,13 @@ func runSling(cmd *cobra.Command, args []string) error {
 	// Log sling event to activity feed
 	actor := detectActor()
 	_ = events.LogFeed(events.TypeSling, actor, events.SlingPayload(beadID, targetAgent))
+
+	// Send Slack notification for job queued
+	slack.Notify(slack.EventJobQueued, map[string]string{
+		slack.FieldBead:     beadID,
+		slack.FieldTitle:    info.Title,
+		slack.FieldAssignee: targetAgent,
+	})
 
 	// Update agent bead's hook_bead field (ZFC: agents track their current work)
 	// Skip if hook was already set atomically during polecat spawn - avoids "agent bead not found"
