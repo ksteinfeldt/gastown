@@ -92,23 +92,26 @@ func runUnsling(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("finding town root: %w", err)
 	}
 
-	// Extract rig name from agent ID (e.g., "gastown/crew/joe" -> "gastown")
-	// For town-level agents like "mayor/", use town root
-	rigName := strings.Split(agentID, "/")[0]
-	var beadsPath string
-	if rigName == "mayor" || rigName == "deacon" {
-		beadsPath = townRoot
-	} else {
-		beadsPath = filepath.Join(townRoot, rigName)
-	}
-
-	b := beads.New(beadsPath)
-
-	// Convert agent ID to agent bead ID and look up the agent bead
+	// Convert agent ID to agent bead ID first, so we can use prefix-based routing
 	agentBeadID := agentIDToBeadID(agentID, townRoot)
 	if agentBeadID == "" {
 		return fmt.Errorf("could not convert agent ID %s to bead ID", agentID)
 	}
+
+	// Resolve the correct beads directory using prefix-based routing.
+	// This matches how updateAgentHookBead resolves the directory when setting
+	// the hook (via beads.ResolveHookDir). Town-level agents (mayor, deacon)
+	// fall back to townRoot since their beads use hq- prefix stored at town level.
+	rigName := strings.Split(agentID, "/")[0]
+	var fallbackPath string
+	if rigName == "mayor" || rigName == "deacon" {
+		fallbackPath = townRoot
+	} else {
+		fallbackPath = filepath.Join(townRoot, rigName)
+	}
+	beadsPath := beads.ResolveHookDir(townRoot, agentBeadID, fallbackPath)
+
+	b := beads.New(beadsPath)
 
 	// Get the agent bead to find current hook
 	agentBead, err := b.Show(agentBeadID)
@@ -132,8 +135,15 @@ func runUnsling(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("bead %s is not hooked (current hook: %s)", targetBeadID, hookedBeadID)
 	}
 
-	// Get the hooked bead to check completion and show title
-	hookedBead, err := b.Show(hookedBeadID)
+	// Get the hooked bead to check completion and show title.
+	// The hooked bead may be in a different database than the agent bead
+	// (e.g., agent in rig db, hooked bead in town db), so resolve its path separately.
+	hookedBeadPath := beads.ResolveHookDir(townRoot, hookedBeadID, beadsPath)
+	hookedB := b
+	if hookedBeadPath != beadsPath {
+		hookedB = beads.New(hookedBeadPath)
+	}
+	hookedBead, err := hookedB.Show(hookedBeadID)
 	if err != nil {
 		// Bead might be deleted - still allow unsling with --force
 		if !unslingForce {
@@ -173,7 +183,7 @@ func runUnsling(cmd *cobra.Command, args []string) error {
 	if hookedBead.Status == beads.StatusHooked {
 		openStatus := "open"
 		emptyAssignee := ""
-		if err := b.Update(hookedBeadID, beads.UpdateOptions{
+		if err := hookedB.Update(hookedBeadID, beads.UpdateOptions{
 			Status:   &openStatus,
 			Assignee: &emptyAssignee,
 		}); err != nil {
