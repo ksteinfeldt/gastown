@@ -776,16 +776,6 @@ func (m *Manager) RepairWorktreeWithOptions(name string, force bool, opts AddOpt
 		}
 	}
 
-	// Close old agent bead before recreation (non-fatal)
-	// NOTE: We use CloseAndClearAgentBead instead of DeleteAgentBead because bd delete --hard
-	// creates tombstones that cannot be reopened.
-	agentID := m.agentBeadID(name)
-	if err := m.beads.CloseAndClearAgentBead(agentID, "polecat repair"); err != nil {
-		if !errors.Is(err, beads.ErrNotFound) {
-			fmt.Printf("Warning: could not close old agent bead %s: %v\n", agentID, err)
-		}
-	}
-
 	// Fetch latest from origin to ensure we have fresh commits (non-fatal: may be offline)
 	_ = repoGit.Fetch("origin")
 
@@ -811,7 +801,17 @@ func (m *Manager) RepairWorktreeWithOptions(name string, force bool, opts AddOpt
 		return nil, fmt.Errorf("creating fresh worktree from %s: %w", startPoint, err)
 	}
 
-	// New worktree created successfully — now safe to remove the old one
+	// New worktree created successfully — now safe to close old bead and remove old worktree.
+	// Closing the bead AFTER creation prevents inconsistent state if creation fails.
+	// NOTE: We use CloseAndClearAgentBead instead of DeleteAgentBead because bd delete --hard
+	// creates tombstones that cannot be reopened.
+	agentID := m.agentBeadID(name)
+	if err := m.beads.CloseAndClearAgentBead(agentID, "polecat repair"); err != nil {
+		if !errors.Is(err, beads.ErrNotFound) {
+			fmt.Printf("Warning: could not close old agent bead %s: %v\n", agentID, err)
+		}
+	}
+
 	if err := repoGit.WorktreeRemove(oldClonePath, true); err != nil {
 		// Fall back to direct removal
 		if removeErr := os.RemoveAll(oldClonePath); removeErr != nil {
