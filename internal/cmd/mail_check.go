@@ -4,11 +4,73 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/style"
 )
+
+const mailCheckCacheTTL = 30 * time.Second
+
+var mailCheckCacheDir string
+
+type mailCheckCacheEntry struct {
+	Timestamp time.Time `json:"timestamp"`
+	Address   string    `json:"address"`
+	Unread    int       `json:"unread"`
+	Subjects  []string  `json:"subjects,omitempty"`
+}
+
+func mailCheckCachePath(address string) string {
+	filename := strings.ReplaceAll(address, "/", "_") + ".json"
+	return filepath.Join(mailCheckCacheDir, filename)
+}
+
+func loadMailCheckCache(address string) *mailCheckCacheEntry {
+	if mailCheckCacheDir == "" {
+		return nil
+	}
+
+	path := mailCheckCachePath(address)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var entry mailCheckCacheEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return nil
+	}
+
+	if entry.Address != address {
+		return nil
+	}
+
+	if time.Since(entry.Timestamp) > mailCheckCacheTTL {
+		return nil
+	}
+
+	return &entry
+}
+
+func saveMailCheckCache(entry *mailCheckCacheEntry) {
+	if mailCheckCacheDir == "" {
+		return
+	}
+
+	os.MkdirAll(mailCheckCacheDir, 0755)
+
+	path := mailCheckCachePath(entry.Address)
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return
+	}
+
+	os.WriteFile(path, data, 0644)
+}
 
 func runMailCheck(cmd *cobra.Command, args []string) error {
 	// Determine which inbox (priority: --identity flag, auto-detect)

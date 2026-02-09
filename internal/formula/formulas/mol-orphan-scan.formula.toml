@@ -312,69 +312,69 @@ required = true
 default = "town"
 
 [vars.action]
-description = "Recovery action taken for an orphan (computed during execution)"
+description = "Action taken on orphan (for loops)"
 default = ""
 
 [vars.action_summary]
-description = "Summary of all actions taken (computed during execution)"
+description = "Summary of all actions taken"
 default = ""
 
 [vars.burn_count]
-description = "Number of orphans burned/deleted (computed during execution)"
+description = "Number of orphans burned"
 default = ""
 
 [vars.escalate_count]
-description = "Number of orphans escalated (computed during execution)"
+description = "Number of orphans escalated"
 default = ""
 
 [vars.escalations_section]
-description = "Formatted escalations section for Mayor report (computed during execution)"
+description = "Detailed escalations section"
 default = ""
 
 [vars.id]
-description = "Orphan identifier (computed during execution)"
+description = "Orphan ID (for loops)"
 default = ""
 
 [vars.issue_count]
-description = "Number of orphaned issues found (computed during execution)"
+description = "Number of orphaned issues"
 default = ""
 
 [vars.mol_count]
-description = "Number of orphaned molecules found (computed during execution)"
+description = "Number of orphaned molecules"
 default = ""
 
 [vars.reason]
-description = "Reason for orphan cleanup action (computed during execution)"
+description = "Reason for orphan action (for loops)"
 default = ""
 
 [vars.reassign_count]
-description = "Number of orphans reassigned (computed during execution)"
+description = "Number of orphans reassigned"
 default = ""
 
 [vars.recover_count]
-description = "Number of orphans recovered (computed during execution)"
+description = "Number of orphans recovered"
 default = ""
 
 [vars.report]
-description = "Full orphan scan report text (computed during execution)"
+description = "Full orphan report text"
 default = ""
 
 [vars.reset_count]
-description = "Number of orphans reset to open (computed during execution)"
+description = "Number of orphans reset to open"
 default = ""
 
 [vars.timestamp]
-description = "Timestamp of the scan (computed during execution)"
+description = "Scan timestamp"
 default = ""
 
 [vars.total_count]
-description = "Total number of orphans found (computed during execution)"
+description = "Total number of orphans found"
 default = ""
 
 [vars.type]
-description = "Type of orphan (issue, molecule, wisp) (computed during execution)"
+description = "Orphan type (for loops)"
 default = ""
 
 [vars.wisp_count]
-description = "Number of orphaned wisps found (computed during execution)"
+description = "Number of orphaned wisps"
 default = ""

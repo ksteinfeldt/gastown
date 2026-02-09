@@ -244,50 +244,46 @@ Dog returns to available state in the pool.
 **Exit criteria:** Deacon notified, dog ready for next work."""
 
 [vars]
-[vars.wisp_type]
-description = "Type of wisp created for this molecule"
-default = "gc_report"
-
 [vars.mode]
 description = "GC mode: 'conservative' or 'aggressive'"
 default = "conservative"
 
 [vars.age]
-description = "Age of item being cleaned (computed during execution)"
+description = "Age of item being cleaned"
 default = ""
 
 [vars.bytes_freed]
-description = "Approximate bytes recovered (computed during execution)"
+description = "Total bytes freed by cleanup"
 default = ""
 
 [vars.error]
-description = "Error message for a failed cleanup (computed during execution)"
+description = "Error message if cleanup failed"
 default = ""
 
 [vars.identifier]
-description = "Identifier of item being cleaned (computed during execution)"
+description = "Identifier of cleaned item"
 default = ""
 
 [vars.item]
-description = "Item that failed cleanup (computed during execution)"
+description = "Item being cleaned"
 default = ""
 
 [vars.reason]
-description = "Reason for cleanup (computed during execution)"
+description = "Reason for cleanup"
 default = ""
 
 [vars.report]
-description = "Full GC report text (computed during execution)"
+description = "Full cleanup report"
 default = ""
 
 [vars.timestamp]
-description = "Timestamp of the GC run (computed during execution)"
+description = "Cleanup timestamp"
 default = ""
 
 [vars.total_cleaned]
-description = "Total number of items cleaned (computed during execution)"
+description = "Total number of items cleaned"
 default = ""
 
 [vars.type]
-description = "Type of item being cleaned (computed during execution)"
+description = "Type of item cleaned"
 default = ""

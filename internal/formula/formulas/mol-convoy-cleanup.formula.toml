@@ -209,21 +209,21 @@ description = "The convoy ID to archive"
 required = true
 
 [vars.contributor_list]
-description = "List of contributing polecats (computed during execution)"
+description = "List of contributors to the convoy"
 default = ""
 
 [vars.duration]
-description = "Total convoy duration (computed during execution)"
+description = "Total duration of the convoy"
 default = ""
 
 [vars.generated_summary]
-description = "Generated convoy summary text (computed during execution)"
+description = "Generated summary text"
 default = ""
 
 [vars.issue_count]
-description = "Number of issues in the convoy (computed during execution)"
+description = "Number of issues in the convoy"
 default = ""
 
 [vars.work_duration]
-description = "Duration of this dog's work (computed during execution)"
+description = "Duration of the cleanup work"
 default = ""
