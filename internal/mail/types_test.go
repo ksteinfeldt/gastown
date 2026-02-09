@@ -817,3 +817,56 @@ func TestParseLabelsIdempotentViaPublicMethods(t *testing.T) {
 		t.Errorf("CC should have 2 entries after multiple method calls, got %d: %v", len(msg.CC), msg.CC)
 	}
 }
+
+func TestNewMessageValidatesForCrossRigAddresses(t *testing.T) {
+	// Regression test: cross-rig addresses like "beads/crew/emma" must have
+	// auto-generated ID and pass validation (gt-rud3p).
+	crossRigAddresses := []string{
+		"beads/crew/emma",
+		"gastown/polecats/Toast",
+		"otherrig/witness",
+		"mayor/",
+	}
+
+	for _, addr := range crossRigAddresses {
+		t.Run(addr, func(t *testing.T) {
+			msg := NewMessage("gastown/dag", addr, "Test subject", "Test body")
+
+			if msg.ID == "" {
+				t.Error("NewMessage must generate a non-empty ID")
+			}
+			if msg.ThreadID == "" {
+				t.Error("NewMessage must generate a non-empty ThreadID")
+			}
+
+			if err := msg.Validate(); err != nil {
+				t.Errorf("NewMessage for %q should produce a valid message, got: %v", addr, err)
+			}
+		})
+	}
+}
+
+func TestNewMessageFanOutCopiesGetUniqueIDs(t *testing.T) {
+	// When fanning out to multiple recipients, copies with cleared IDs
+	// should get unique IDs from sendToSingle (gt-rud3p).
+	msg := NewMessage("gastown/dag", "beads/crew/emma", "Test", "Body")
+	originalID := msg.ID
+
+	if originalID == "" {
+		t.Fatal("original message must have an ID")
+	}
+
+	// Simulate fan-out: create a copy and clear its ID
+	msgCopy := *msg
+	msgCopy.To = "otherrig/crew/bob"
+	msgCopy.ID = ""
+
+	if msgCopy.ID == originalID {
+		t.Error("fan-out copy ID should be cleared, not match original")
+	}
+
+	// The cleared copy should fail validation (sendToSingle regenerates it)
+	if err := msgCopy.Validate(); err == nil {
+		t.Error("copy with empty ID should fail validation before sendToSingle regenerates it")
+	}
+}

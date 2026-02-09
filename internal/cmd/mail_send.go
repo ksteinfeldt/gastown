@@ -71,13 +71,8 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 	// Determine sender
 	from := detectSender()
 
-	// Create message
-	msg := &mail.Message{
-		From:    from,
-		To:      to,
-		Subject: mailSubject,
-		Body:    mailBody,
-	}
+	// Create message with auto-generated ID and thread ID
+	msg := mail.NewMessage(from, to, mailSubject, mailBody)
 
 	// Set priority (--urgent overrides --priority)
 	if mailUrgent {
@@ -177,6 +172,7 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 			// Direct/agent messages: fan out to each recipient
 			msgCopy := *msg
 			msgCopy.To = rec.Address
+			msgCopy.ID = "" // Each fan-out copy gets its own unique ID
 			if err := router.Send(&msgCopy); err != nil {
 				sendErrs = append(sendErrs, fmt.Sprintf("%s: %v", rec.Address, err))
 				continue
