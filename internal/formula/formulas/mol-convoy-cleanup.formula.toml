@@ -207,3 +207,23 @@ or retire the dog if pool is oversized.
 [vars.convoy]
 description = "The convoy ID to archive"
 required = true
+
+[vars.contributor_list]
+description = "List of contributors to the convoy"
+default = ""
+
+[vars.duration]
+description = "Total duration of the convoy"
+default = ""
+
+[vars.generated_summary]
+description = "Generated summary text"
+default = ""
+
+[vars.issue_count]
+description = "Number of issues in the convoy"
+default = ""
+
+[vars.work_duration]
+description = "Duration of the cleanup work"
+default = ""
