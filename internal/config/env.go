@@ -31,10 +31,6 @@ type AgentEnvConfig struct {
 	// SessionIDEnv is the environment variable name that holds the session ID.
 	// Sets GT_SESSION_ID_ENV so the runtime knows where to find the session ID.
 	SessionIDEnv string
-
-	// BeadsNoDaemon sets BEADS_NO_DAEMON=1 if true
-	// Used for polecats that should bypass the beads daemon
-	BeadsNoDaemon bool
 }
 
 // AgentEnv returns all environment variables for an agent based on the config.
@@ -79,6 +75,11 @@ func AgentEnv(cfg AgentEnvConfig) map[string]string {
 		env["GT_POLECAT"] = cfg.AgentName
 		env["BD_ACTOR"] = fmt.Sprintf("%s/polecats/%s", cfg.Rig, cfg.AgentName)
 		env["GIT_AUTHOR_NAME"] = cfg.AgentName
+		// Disable Dolt auto-commit for polecats. With branch-per-polecat,
+		// individual commits are pointless — all changes merge at gt done time
+		// via DOLT_MERGE. Without this, concurrent polecats cause manifest
+		// contention leading to Dolt read-only mode (gt-5cc2p).
+		env["BD_DOLT_AUTO_COMMIT"] = "off"
 
 	case "crew":
 		env["GT_ROLE"] = fmt.Sprintf("%s/crew/%s", cfg.Rig, cfg.AgentName)
@@ -101,10 +102,6 @@ func AgentEnv(cfg AgentEnvConfig) map[string]string {
 	// Set BEADS_AGENT_NAME for polecat/crew (uses same format as BD_ACTOR)
 	if cfg.Role == "polecat" || cfg.Role == "crew" {
 		env["BEADS_AGENT_NAME"] = fmt.Sprintf("%s/%s", cfg.Rig, cfg.AgentName)
-	}
-
-	if cfg.BeadsNoDaemon {
-		env["BEADS_NO_DAEMON"] = "1"
 	}
 
 	// Add optional runtime config directory
@@ -132,7 +129,7 @@ func AgentEnvSimple(role, rig, agentName string) map[string]string {
 
 // ShellQuote returns a shell-safe quoted string.
 // Values containing special characters are wrapped in single quotes.
-// Single quotes within the value are escaped using the '\'' idiom.
+// Single quotes within the value are escaped using the '\” idiom.
 func ShellQuote(s string) string {
 	// Check if quoting is needed (contains shell special chars)
 	needsQuoting := false

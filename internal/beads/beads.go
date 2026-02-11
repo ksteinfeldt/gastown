@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/steveyegge/gastown/internal/runtime"
 )
@@ -56,6 +57,16 @@ type Issue struct {
 	// Detailed dependency info from show output
 	Dependencies []IssueDep `json:"dependencies,omitempty"`
 	Dependents   []IssueDep `json:"dependents,omitempty"`
+}
+
+// HasLabel checks if an issue has a specific label.
+func HasLabel(issue *Issue, label string) bool {
+	for _, l := range issue.Labels {
+		if l == label {
+			return true
+		}
+	}
+	return false
 }
 
 // IssueDep represents a dependency or dependent issue with its relation.
@@ -119,7 +130,7 @@ type Beads struct {
 	// Lazy-cached town root for routing resolution.
 	// Populated on first call to getTownRoot() to avoid filesystem walk on every operation.
 	townRoot     string
-	searchedRoot bool
+	townRootOnce sync.Once
 }
 
 // New creates a new Beads wrapper for the given directory.
@@ -153,11 +164,11 @@ func (b *Beads) getActor() string {
 // getTownRoot returns the Gas Town root directory, using lazy caching.
 // The town root is found by walking up from workDir looking for mayor/town.json.
 // Returns empty string if not in a Gas Town project.
+// Thread-safe: uses sync.Once to prevent races on concurrent access.
 func (b *Beads) getTownRoot() string {
-	if !b.searchedRoot {
+	b.townRootOnce.Do(func() {
 		b.townRoot = FindTownRoot(b.workDir)
-		b.searchedRoot = true
-	}
+	})
 	return b.townRoot
 }
 
@@ -179,11 +190,9 @@ func (b *Beads) Init(prefix string) error {
 
 // run executes a bd command and returns stdout.
 func (b *Beads) run(args ...string) ([]byte, error) {
-	// Use --no-daemon for faster read operations (avoids daemon IPC overhead)
-	// The daemon is primarily useful for write coalescing, not reads.
 	// Use --allow-stale to prevent failures when db is out of sync with JSONL
 	// (e.g., after daemon is killed during shutdown before syncing).
-	fullArgs := append([]string{"--no-daemon", "--allow-stale"}, args...)
+	fullArgs := append([]string{"--allow-stale"}, args...)
 
 	// Always explicitly set BEADS_DIR to prevent inherited env vars from
 	// causing prefix mismatches. Use explicit beadsDir if set, otherwise
@@ -224,8 +233,8 @@ func (b *Beads) run(args ...string) ([]byte, error) {
 		return nil, b.wrapError(err, stderr.String(), args)
 	}
 
-	// Handle bd --no-daemon exit code 0 bug: when issue not found,
-	// --no-daemon exits 0 but writes error to stderr with empty stdout.
+	// Handle bd exit code 0 bug: when issue not found,
+	// bd may exit 0 but write error to stderr with empty stdout.
 	// Detect this case and treat as error to avoid JSON parse failures.
 	if stdout.Len() == 0 && stderr.Len() > 0 {
 		return nil, b.wrapError(fmt.Errorf("command produced no output"), stderr.String(), args)
@@ -414,6 +423,14 @@ func (b *Beads) ReadyWithType(issueType string) ([]*Issue, error) {
 
 // Show returns detailed information about an issue.
 func (b *Beads) Show(id string) (*Issue, error) {
+	// Route cross-rig queries via routes.jsonl so that rig-level bead IDs
+	// (e.g., "gt-abc123") resolve to the correct rig database.
+	targetDir := ResolveRoutingTarget(b.getTownRoot(), id, b.getResolvedBeadsDir())
+	if targetDir != b.getResolvedBeadsDir() {
+		target := NewWithBeadsDir(filepath.Dir(targetDir), targetDir)
+		return target.Show(id)
+	}
+
 	out, err := b.run("show", id, "--json")
 	if err != nil {
 		return nil, err
@@ -443,8 +460,7 @@ func (b *Beads) ShowMultiple(ids []string) (map[string]*Issue, error) {
 	args := append([]string{"show", "--json"}, ids...)
 	out, err := b.run(args...)
 	if err != nil {
-		// If bd fails, return empty map (some IDs might not exist)
-		return make(map[string]*Issue), nil
+		return nil, fmt.Errorf("bd show: %w", err)
 	}
 
 	var issues []*Issue

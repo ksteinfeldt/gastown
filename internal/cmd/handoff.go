@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,6 +58,7 @@ var (
 	handoffSubject string
 	handoffMessage string
 	handoffCollect bool
+	handoffStdin   bool
 )
 
 func init() {
@@ -65,10 +67,23 @@ func init() {
 	handoffCmd.Flags().StringVarP(&handoffSubject, "subject", "s", "", "Subject for handoff mail (optional)")
 	handoffCmd.Flags().StringVarP(&handoffMessage, "message", "m", "", "Message body for handoff mail (optional)")
 	handoffCmd.Flags().BoolVarP(&handoffCollect, "collect", "c", false, "Auto-collect state (status, inbox, beads) into handoff message")
+	handoffCmd.Flags().BoolVar(&handoffStdin, "stdin", false, "Read message body from stdin (avoids shell quoting issues)")
 	rootCmd.AddCommand(handoffCmd)
 }
 
 func runHandoff(cmd *cobra.Command, args []string) error {
+	// Handle --stdin: read message body from stdin (avoids shell quoting issues)
+	if handoffStdin {
+		if handoffMessage != "" {
+			return fmt.Errorf("cannot use --stdin with --message/-m")
+		}
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+		handoffMessage = strings.TrimRight(string(data), "\n")
+	}
+
 	// Check if we're a polecat - polecats use gt done instead
 	// GT_POLECAT is set by the session manager when starting polecat sessions
 	if polecatName := os.Getenv("GT_POLECAT"); polecatName != "" {
@@ -414,7 +429,15 @@ func buildRestartCommand(sessionName string) (string, error) {
 	//
 	// Check if current session is using a non-default agent (GT_AGENT env var).
 	// If so, preserve it across handoff by using the override variant.
+	// Fall back to tmux session environment if process env doesn't have it,
+	// since exec env vars may not propagate through all agent runtimes.
 	currentAgent := os.Getenv("GT_AGENT")
+	if currentAgent == "" {
+		t := tmux.NewTmux()
+		if val, err := t.GetEnvironment(sessionName, "GT_AGENT"); err == nil && val != "" {
+			currentAgent = val
+		}
+	}
 	var runtimeCmd string
 	if currentAgent != "" {
 		var err error
@@ -429,7 +452,8 @@ func buildRestartCommand(sessionName string) (string, error) {
 	// Build environment exports - role vars first, then Claude vars
 	var exports []string
 	if gtRole != "" {
-		runtimeConfig := config.LoadRuntimeConfig("")
+		simpleRole := config.ExtractSimpleRole(gtRole)
+		runtimeConfig := config.ResolveRoleAgentConfig(simpleRole, townRoot, "")
 		exports = append(exports, "GT_ROLE="+gtRole)
 		exports = append(exports, "BD_ACTOR="+gtRole)
 		exports = append(exports, "GIT_AUTHOR_NAME="+gtRole)
@@ -479,19 +503,11 @@ func sessionWorkDir(sessionName, townRoot string) (string, error) {
 
 	case strings.Contains(sessionName, "-crew-"):
 		// gt-<rig>-crew-<name> -> <townRoot>/<rig>/crew/<name>
-		parts := strings.Split(sessionName, "-")
-		if len(parts) < 4 {
-			return "", fmt.Errorf("invalid crew session name: %s", sessionName)
+		rig, name, ok := parseCrewSessionName(sessionName)
+		if !ok {
+			return "", fmt.Errorf("cannot parse crew session name: %s", sessionName)
 		}
-		// Find the index of "crew" to split rig name (may contain dashes)
-		for i, p := range parts {
-			if p == "crew" && i > 1 && i < len(parts)-1 {
-				rig := strings.Join(parts[1:i], "-")
-				name := strings.Join(parts[i+1:], "-")
-				return fmt.Sprintf("%s/%s/crew/%s", townRoot, rig, name), nil
-			}
-		}
-		return "", fmt.Errorf("cannot parse crew session name: %s", sessionName)
+		return fmt.Sprintf("%s/%s/crew/%s", townRoot, rig, name), nil
 
 	case strings.HasSuffix(sessionName, "-witness"):
 		// gt-<rig>-witness -> <townRoot>/<rig>/witness

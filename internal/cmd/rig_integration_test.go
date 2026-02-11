@@ -68,6 +68,45 @@ func createTestGitRepo(t *testing.T, name string) string {
 	return repoDir
 }
 
+// createTestGitRepoAt creates a git repo at the specified path (for --adopt tests).
+func createTestGitRepoAt(t *testing.T, repoDir string) {
+	t.Helper()
+
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+
+	cmds := [][]string{
+		{"git", "init", "--initial-branch=main"},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test User"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repoDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	readmePath := filepath.Join(repoDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte("# Test Repo\n"), 0644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+
+	commitCmds := [][]string{
+		{"git", "add", "."},
+		{"git", "commit", "-m", "Initial commit"},
+	}
+	for _, args := range commitCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repoDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+}
+
 // setupTestTown creates a minimal Gas Town workspace for testing.
 // Returns townRoot and a cleanup function.
 func setupTestTown(t *testing.T) string {
@@ -170,13 +209,13 @@ pwsh -NoProfile -NoLogo -File "` + psPath + `" %*
 	} else {
 		// Create a script that simulates bd init and other commands
 		// Also logs all create commands for verification.
-		// Note: beads.run() prepends --no-daemon --allow-stale to all commands,
+		// Note: beads.run() prepends --allow-stale to all commands,
 		// so we need to find the actual command in the argument list.
 		script := `#!/bin/sh
 # Mock bd for testing
 LOG_FILE="` + logPath + `"
 
-# Find the actual command (skip global flags like --no-daemon, --allow-stale)
+# Find the actual command (skip global flags like --allow-stale)
 cmd=""
 for arg in "$@"; do
   case "$arg" in
