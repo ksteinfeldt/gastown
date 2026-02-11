@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/beads"
+	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/events"
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/slack"
@@ -116,6 +117,12 @@ var (
 	slingNoMerge       bool   // --no-merge: skip merge queue on completion (for upstream PRs/human review)
 	slingNoBoot        bool   // --no-boot: skip wakeRigAgents (avoid witness/refinery boot and lock contention)
 	slingMaxConcurrent int    // --max-concurrent: limit concurrent spawns in batch mode
+
+	// Agent teams flags
+	slingTeam         bool   // --team: enable Claude Code agent teams for this polecat
+	slingTeamSize     int    // --team-size: max teammates (default 3)
+	slingTeammateTier string // --teammate-tier: model tier for teammates (default "sonnet")
+	slingNoTeam       bool   // --no-team: override rig-level team defaults
 )
 
 func init() {
@@ -138,6 +145,12 @@ func init() {
 	slingCmd.Flags().BoolVar(&slingNoMerge, "no-merge", false, "Skip merge queue on completion (keep work on feature branch for review)")
 	slingCmd.Flags().BoolVar(&slingNoBoot, "no-boot", false, "Skip rig boot after polecat spawn (avoids witness/refinery lock contention)")
 	slingCmd.Flags().IntVar(&slingMaxConcurrent, "max-concurrent", 0, "Limit concurrent polecat spawns in batch mode (0 = no limit)")
+
+	// Agent teams flags
+	slingCmd.Flags().BoolVar(&slingTeam, "team", false, "Enable Claude Code agent teams (polecat spawns teammates for parallel work)")
+	slingCmd.Flags().IntVar(&slingTeamSize, "team-size", 3, "Max teammates when --team is enabled")
+	slingCmd.Flags().StringVar(&slingTeammateTier, "teammate-tier", "sonnet", "Model tier for teammates: opus, sonnet, haiku")
+	slingCmd.Flags().BoolVar(&slingNoTeam, "no-team", false, "Override rig-level team defaults (force single-agent mode)")
 
 	rootCmd.AddCommand(slingCmd)
 }
@@ -162,6 +175,30 @@ func runSling(cmd *cobra.Command, args []string) error {
 			slingAgent = "claude-haiku"
 		default:
 			return fmt.Errorf("invalid tier '%s': must be opus, sonnet, or haiku", slingTier)
+		}
+	}
+
+	// Validate agent teams flags
+	if slingTeam && slingNoTeam {
+		return fmt.Errorf("cannot use both --team and --no-team flags")
+	}
+	if slingTeamSize < 1 || slingTeamSize > 10 {
+		return fmt.Errorf("--team-size must be between 1 and 10 (got %d)", slingTeamSize)
+	}
+	switch strings.ToLower(slingTeammateTier) {
+	case "opus", "sonnet", "haiku":
+		// valid
+	default:
+		return fmt.Errorf("invalid --teammate-tier '%s': must be opus, sonnet, or haiku", slingTeammateTier)
+	}
+
+	// Build TeamConfig from flags (nil if not enabled)
+	var teamConfig *config.TeamConfig
+	if slingTeam {
+		teamConfig = &config.TeamConfig{
+			Enabled:       true,
+			MaxTeammates:  slingTeamSize,
+			TeammateModel: slingTeammateTier,
 		}
 	}
 
@@ -278,15 +315,16 @@ func runSling(cmd *cobra.Command, args []string) error {
 		target = args[1]
 	}
 	resolved, err := resolveTarget(target, ResolveTargetOptions{
-		DryRun:   slingDryRun,
-		Force:    slingForce,
-		Create:   slingCreate,
-		Account:  slingAccount,
-		Agent:    slingAgent,
-		NoBoot:   slingNoBoot,
-		HookBead: beadID,
-		BeadID:   beadID,
-		TownRoot: townRoot,
+		DryRun:     slingDryRun,
+		Force:      slingForce,
+		Create:     slingCreate,
+		Account:    slingAccount,
+		Agent:      slingAgent,
+		NoBoot:     slingNoBoot,
+		HookBead:   beadID,
+		BeadID:     beadID,
+		TownRoot:   townRoot,
+		TeamConfig: teamConfig,
 	})
 	if err != nil {
 		return err
@@ -409,8 +447,13 @@ func runSling(cmd *cobra.Command, args []string) error {
 	// Issue #288: Auto-apply mol-polecat-work when slinging bare bead to polecat.
 	// This ensures polecats get structured work guidance through formula-on-bead.
 	// Use --hook-raw-bead to bypass for expert/debugging scenarios.
+	// When --team is set, use mol-polecat-work-team for team-coordinated work.
 	if formulaName == "" && !slingHookRawBead && strings.Contains(targetAgent, "/polecats/") {
-		formulaName = "mol-polecat-work"
+		if teamConfig != nil && teamConfig.Enabled {
+			formulaName = "mol-polecat-work-team"
+		} else {
+			formulaName = "mol-polecat-work"
+		}
 		fmt.Printf("  Auto-applying %s for polecat work...\n", formulaName)
 	}
 
@@ -433,12 +476,24 @@ func runSling(cmd *cobra.Command, args []string) error {
 		if slingArgs != "" {
 			fmt.Printf("  args (in nudge): %s\n", slingArgs)
 		}
+		if teamConfig != nil && teamConfig.Enabled {
+			fmt.Printf("  team: enabled (max_teammates=%d, teammate_model=%s)\n",
+				teamConfig.MaxTeammates, teamConfig.TeammateModel)
+		}
 		fmt.Printf("Would inject start prompt to pane: %s\n", targetPane)
 		return nil
 	}
 
 	// Formula-on-bead mode: instantiate formula and bond to original bead
 	if formulaName != "" {
+		// Inject team variables into formula when agent teams are enabled
+		if teamConfig != nil && teamConfig.Enabled {
+			slingVars = append(slingVars,
+				fmt.Sprintf("max_teammates=%d", teamConfig.MaxTeammates),
+				fmt.Sprintf("teammate_model=%s", teamConfig.TeammateModel),
+			)
+		}
+
 		fmt.Printf("  Instantiating formula %s...\n", formulaName)
 
 		result, err := InstantiateFormulaOnBead(formulaName, beadID, info.Title, hookWorkDir, townRoot, false, slingVars)

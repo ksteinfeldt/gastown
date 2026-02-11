@@ -31,8 +31,9 @@ type SpawnedPolecatInfo struct {
 	DoltBranch  string // Dolt branch for write isolation (empty if not created)
 
 	// Internal fields for deferred session start
-	account string
-	agent   string
+	account    string
+	agent      string
+	teamConfig *config.TeamConfig
 }
 
 // AgentID returns the agent identifier (e.g., "gastown/polecats/Toast")
@@ -47,11 +48,12 @@ func (s *SpawnedPolecatInfo) SessionStarted() bool {
 
 // SlingSpawnOptions contains options for spawning a polecat via sling.
 type SlingSpawnOptions struct {
-	Force    bool   // Force spawn even if polecat has uncommitted work
-	Account  string // Claude Code account handle to use
-	Create   bool   // Create polecat if it doesn't exist (currently always true for sling)
-	HookBead string // Bead ID to set as hook_bead at spawn time (atomic assignment)
-	Agent    string // Agent override for this spawn (e.g., "gemini", "codex", "claude-haiku")
+	Force      bool               // Force spawn even if polecat has uncommitted work
+	Account    string             // Claude Code account handle to use
+	Create     bool               // Create polecat if it doesn't exist (currently always true for sling)
+	HookBead   string             // Bead ID to set as hook_bead at spawn time (atomic assignment)
+	Agent      string             // Agent override for this spawn (e.g., "gemini", "codex", "claude-haiku")
+	TeamConfig *config.TeamConfig // Agent teams configuration (nil = no teams)
 }
 
 // SpawnPolecatForSling creates a fresh polecat and optionally starts its session.
@@ -197,6 +199,7 @@ func SpawnPolecatForSling(rigName string, opts SlingSpawnOptions) (*SpawnedPolec
 		DoltBranch:  doltBranch,
 		account:     opts.Account,
 		agent:       opts.Agent,
+		teamConfig:  opts.TeamConfig,
 	}, nil
 }
 
@@ -243,6 +246,7 @@ func (s *SpawnedPolecatInfo) StartSession() (string, error) {
 	startOpts := polecat.SessionStartOptions{
 		RuntimeConfigDir: claudeConfigDir,
 		DoltBranch:       s.DoltBranch,
+		TeamConfig:       s.teamConfig,
 	}
 	if s.agent != "" {
 		cmd, err := config.BuildPolecatStartupCommandWithAgentOverride(s.RigName, s.PolecatName, r.Path, "", s.agent)

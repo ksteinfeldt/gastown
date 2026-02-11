@@ -353,6 +353,10 @@ type RigSettings struct {
 	// Overrides TownSettings.RoleAgents for this specific rig.
 	// Example: {"witness": "claude-haiku", "polecat": "claude-sonnet"}
 	RoleAgents map[string]string `json:"role_agents,omitempty"`
+
+	// Team configures default agent team settings for polecats in this rig.
+	// Can be overridden per-sling with --team / --no-team flags.
+	Team *TeamConfig `json:"team,omitempty"`
 }
 
 // CrewConfig represents crew workspace settings for a rig.
@@ -1102,6 +1106,23 @@ func NewEscalationConfig() *EscalationConfig {
 		StaleThreshold:   "4h",
 		MaxReescalations: intPtr(2),
 	}
+}
+
+// TeamConfig configures Claude Code's experimental agent teams feature.
+// When enabled, the polecat acts as team lead and can spawn teammate instances
+// that share a task list, message each other, and self-coordinate.
+type TeamConfig struct {
+	// Enabled activates agent teams for this polecat session.
+	Enabled bool `json:"enabled"`
+
+	// MaxTeammates limits the number of teammate instances (default 3).
+	MaxTeammates int `json:"max_teammates,omitempty"`
+
+	// TeammateModel specifies the model tier for teammates (e.g., "sonnet").
+	TeammateModel string `json:"teammate_model,omitempty"`
+
+	// DelegateMode enables Shift+Tab delegate mode for full delegation.
+	DelegateMode bool `json:"delegate_mode,omitempty"`
 }
 
 // CurrentBackendConfigVersion is the current schema version for BackendConfig.
