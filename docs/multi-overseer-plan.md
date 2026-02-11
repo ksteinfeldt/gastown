@@ -6,20 +6,21 @@
 
 ## Executive Summary
 
-This document outlines the architectural design for enabling **multiple human overseers** (users) to collaborate within a **single Gas Town instance**. This differs from multi-tenant architecture (which provides complete isolation between separate town instances). The multi-overseer model creates a collaborative workspace where multiple users can work together in one shared environment, each owning their own rigs but with visibility into other users' work.
+This document outlines the architectural design for enabling **multiple human overseers** (users) to collaborate within a **single Gas Town instance**. This differs from multi-tenant architecture (which provides complete isolation between separate town instances). The multi-overseer model creates a collaborative workspace where multiple users can work together in one shared environment, each owning their own rigs with optional visibility into other users' work.
 
 **Key Objectives:**
 - Enable multiple human users in a single Gas Town instance
 - Each user owns their own rigs (no rig sharing)
-- Users can see each other and coordinate work
+- Users can coordinate work through mail and shared beads
 - Clear ownership and attribution per user
 - Simplified collaboration model (not enterprise multi-tenancy)
+- Cross-user rig visibility is optional (acceptable if easier, but not required)
 
 **Expected Benefits:**
 - Team collaboration in shared development environment
 - Clear attribution of work to specific users
 - Coordinated agent dispatch across team members
-- Shared visibility for project coordination
+- Optional visibility for project coordination
 - Simpler than full multi-tenant isolation
 
 **NOT in Scope:**
@@ -117,13 +118,17 @@ Agent identity must include user context:
 - Enables attribution: "which user's agent did this work?"
 - Preserved in commits, beads, events
 
-#### FR-4: Cross-User Visibility
+#### FR-4: Cross-User Coordination (Optional Visibility)
 
-Users should be able to:
-- **See other users**: List active users in town
+Users must be able to:
+- **Coordinate work**: Mail between users, shared beads visibility
+- **See other users**: List active users in town (optional, but acceptable if easier)
+
+Optional features (implement if simpler):
 - **See other users' rigs**: View rig registry with ownership
 - **See cross-user activity**: Town-wide agent status, convoy tracking
-- **Coordinate work**: Mail between users, shared beads visibility
+
+**Note:** Cross-user rig visibility is NOT required. Users primarily coordinate through mail and beads, not by browsing each other's rigs. If providing visibility is architecturally simpler than hiding it, that's acceptable.
 
 #### FR-5: User-Scoped Mail Routing
 
@@ -134,10 +139,18 @@ Users should be able to:
 
 #### FR-6: Simplified Mayor Model
 
-- **Single shared Mayor** (not per-user)
+- **Single shared Mayor agent** (not per-user)
+- **Each user has their own session** to communicate with Mayor (prevents talking over each other)
+- Users sling work to Mayor through their own session
 - Mayor has town-wide visibility
 - Mayor can coordinate across all users' rigs
 - Simplifies architecture vs. per-user mayors
+
+**Architecture:**
+- One Mayor agent process handling town-wide coordination
+- Multiple user sessions (one per user) that submit work to Mayor
+- Each user session maintains separate conversation history
+- Mayor processes requests from all users but maintains separate contexts
 
 #### FR-7: User-Aware Beads
 
@@ -668,9 +681,9 @@ Priority order for determining current user:
 
 ---
 
-### Phase 4: UI/UX and Visibility (Week 7-8)
+### Phase 4: UI/UX and Optional Visibility (Week 7-8)
 
-**Goal:** Surface user context in UI and enable cross-user visibility
+**Goal:** Surface user context in UI and enable optional cross-user visibility
 
 **Tasks:**
 
@@ -704,13 +717,13 @@ Priority order for determining current user:
 - User context in CLI prompts and status
 - User-filtered agent and bead listings
 - Updated dashboard with user views
-- Cross-user visibility for coordination
+- Optional cross-user visibility (implement if simpler than hiding)
 
 **Testing:**
 - CLI shows correct user context
 - User filtering works correctly
 - Dashboard updates with user activity
-- Cross-user visibility without leakage
+- If cross-user visibility implemented: verify no unintended information leakage
 
 ---
 
