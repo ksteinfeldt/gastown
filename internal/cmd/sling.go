@@ -192,7 +192,8 @@ func runSling(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid --teammate-tier '%s': must be opus, sonnet, or haiku", slingTeammateTier)
 	}
 
-	// Build TeamConfig from flags (nil if not enabled)
+	// Build TeamConfig from flags. If --team is not explicitly set, check rig-level
+	// defaults from settings/config.json. --no-team suppresses rig defaults.
 	var teamConfig *config.TeamConfig
 	if slingTeam {
 		teamConfig = &config.TeamConfig{
@@ -201,6 +202,7 @@ func runSling(cmd *cobra.Command, args []string) error {
 			TeammateModel: slingTeammateTier,
 		}
 	}
+	// Rig-level team defaults are resolved later (after townRoot and target are known).
 
 	// Disable Dolt auto-commit for all bd commands run during sling (gt-u6n6a).
 	// Under concurrent load (batch slinging), auto-commits from individual bd writes
@@ -314,6 +316,24 @@ func runSling(cmd *cobra.Command, args []string) error {
 	if len(args) > 1 {
 		target = args[1]
 	}
+
+	// Rig-level team defaults: if --team was not explicitly set and --no-team was not
+	// passed, check the target rig's settings for default team configuration.
+	if teamConfig == nil && !slingNoTeam && target != "" {
+		if rigTeamConfig := loadRigTeamDefaults(target, townRoot); rigTeamConfig != nil {
+			teamConfig = rigTeamConfig
+			// CLI flags override rig defaults when explicitly set
+			if slingTeamSize != 3 { // 3 is the flag default — non-default means user set it
+				teamConfig.MaxTeammates = slingTeamSize
+			}
+			if slingTeammateTier != "sonnet" { // "sonnet" is the flag default
+				teamConfig.TeammateModel = slingTeammateTier
+			}
+			fmt.Printf("  Using rig-level team defaults (max_teammates=%d, teammate_model=%s)\n",
+				teamConfig.MaxTeammates, teamConfig.TeammateModel)
+		}
+	}
+
 	resolved, err := resolveTarget(target, ResolveTargetOptions{
 		DryRun:     slingDryRun,
 		Force:      slingForce,
@@ -681,4 +701,38 @@ func rollbackSlingArtifacts(spawnInfo *SpawnedPolecatInfo, beadID, hookWorkDir s
 
 	// 2. Clean up the spawned polecat (worktree, agent bead, etc.)
 	cleanupSpawnedPolecat(spawnInfo, spawnInfo.RigName)
+}
+
+// loadRigTeamDefaults extracts a rig name from a target string and loads
+// team defaults from the rig's settings/config.json. Returns nil if the
+// target isn't a rig, settings don't exist, or team isn't configured.
+func loadRigTeamDefaults(target, townRoot string) *config.TeamConfig {
+	// Extract rig name from target: bare name ("gastown") or path ("gastown/polecats/Toast")
+	rigName := target
+	if strings.Contains(target, "/") {
+		rigName = strings.SplitN(target, "/", 2)[0]
+	}
+
+	// Verify it's actually a rig (avoid loading settings for "mayor", "deacon", etc.)
+	if _, isRig := IsRigName(rigName); !isRig {
+		return nil
+	}
+
+	rigPath := filepath.Join(townRoot, rigName)
+	settings, err := config.LoadRigSettings(config.RigSettingsPath(rigPath))
+	if err != nil {
+		return nil // No settings file or parse error — no defaults
+	}
+
+	if settings.Team == nil || !settings.Team.Enabled {
+		return nil
+	}
+
+	// Return a copy so callers can modify without affecting the loaded settings
+	return &config.TeamConfig{
+		Enabled:       true,
+		MaxTeammates:  settings.Team.MaxTeammates,
+		TeammateModel: settings.Team.TeammateModel,
+		DelegateMode:  settings.Team.DelegateMode,
+	}
 }

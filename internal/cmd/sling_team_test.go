@@ -494,3 +494,167 @@ func TestResolveTargetOptionsTeamConfig(t *testing.T) {
 		t.Error("TeamConfig.DelegateMode should be true")
 	}
 }
+
+// TestLoadRigTeamDefaults verifies rig-level team config loading.
+func TestLoadRigTeamDefaults(t *testing.T) {
+	townRoot := t.TempDir()
+
+	// Create a rig with team defaults in settings
+	rigName := "testrig"
+	rigPath := filepath.Join(townRoot, rigName)
+	rigSettingsDir := filepath.Join(rigPath, "settings")
+	if err := os.MkdirAll(rigSettingsDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Create minimal rig structure so IsRigName succeeds
+	if err := os.MkdirAll(filepath.Join(townRoot, "mayor", "rig"), 0755); err != nil {
+		t.Fatalf("mkdir mayor/rig: %v", err)
+	}
+	rigsJSON := `{"rigs":{"testrig":{"path":"testrig"}}}`
+	if err := os.WriteFile(filepath.Join(townRoot, "mayor", "rigs.json"), []byte(rigsJSON), 0644); err != nil {
+		t.Fatalf("write rigs.json: %v", err)
+	}
+
+	// Write rig settings with team config
+	settingsJSON := `{
+		"type": "rig-settings",
+		"version": 1,
+		"team": {
+			"enabled": true,
+			"max_teammates": 5,
+			"teammate_model": "opus",
+			"delegate_mode": true
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(rigSettingsDir, "config.json"), []byte(settingsJSON), 0644); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	// Switch to town root so IsRigName can find the workspace
+	cwd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	_ = os.Chdir(filepath.Join(townRoot, "mayor", "rig"))
+
+	// Test: bare rig name loads defaults
+	tc := loadRigTeamDefaults(rigName, townRoot)
+	if tc == nil {
+		t.Fatal("expected non-nil TeamConfig from rig defaults")
+	}
+	if !tc.Enabled {
+		t.Error("Enabled should be true")
+	}
+	if tc.MaxTeammates != 5 {
+		t.Errorf("MaxTeammates = %d, want 5", tc.MaxTeammates)
+	}
+	if tc.TeammateModel != "opus" {
+		t.Errorf("TeammateModel = %q, want %q", tc.TeammateModel, "opus")
+	}
+	if !tc.DelegateMode {
+		t.Error("DelegateMode should be true")
+	}
+
+	// Test: path-style target extracts rig name
+	tc2 := loadRigTeamDefaults(rigName+"/polecats/Toast", townRoot)
+	if tc2 == nil {
+		t.Fatal("expected non-nil TeamConfig from path-style target")
+	}
+	if tc2.MaxTeammates != 5 {
+		t.Errorf("MaxTeammates = %d, want 5", tc2.MaxTeammates)
+	}
+}
+
+// TestLoadRigTeamDefaults_NoSettings verifies nil return when no settings exist.
+func TestLoadRigTeamDefaults_NoSettings(t *testing.T) {
+	townRoot := t.TempDir()
+
+	// Create rig without settings
+	rigName := "emptyrig"
+	if err := os.MkdirAll(filepath.Join(townRoot, rigName), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(townRoot, "mayor", "rig"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	rigsJSON := `{"rigs":{"emptyrig":{"path":"emptyrig"}}}`
+	if err := os.WriteFile(filepath.Join(townRoot, "mayor", "rigs.json"), []byte(rigsJSON), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cwd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	_ = os.Chdir(filepath.Join(townRoot, "mayor", "rig"))
+
+	tc := loadRigTeamDefaults(rigName, townRoot)
+	if tc != nil {
+		t.Errorf("expected nil TeamConfig when no settings exist, got %+v", tc)
+	}
+}
+
+// TestLoadRigTeamDefaults_TeamDisabled verifies nil return when team is not enabled.
+func TestLoadRigTeamDefaults_TeamDisabled(t *testing.T) {
+	townRoot := t.TempDir()
+
+	rigName := "disabledrig"
+	rigPath := filepath.Join(townRoot, rigName)
+	if err := os.MkdirAll(filepath.Join(rigPath, "settings"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(townRoot, "mayor", "rig"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	rigsJSON := `{"rigs":{"disabledrig":{"path":"disabledrig"}}}`
+	if err := os.WriteFile(filepath.Join(townRoot, "mayor", "rigs.json"), []byte(rigsJSON), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	settingsJSON := `{
+		"type": "rig-settings",
+		"version": 1,
+		"team": {
+			"enabled": false,
+			"max_teammates": 5
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(rigPath, "settings", "config.json"), []byte(settingsJSON), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cwd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	_ = os.Chdir(filepath.Join(townRoot, "mayor", "rig"))
+
+	tc := loadRigTeamDefaults(rigName, townRoot)
+	if tc != nil {
+		t.Errorf("expected nil TeamConfig when team is disabled, got %+v", tc)
+	}
+}
+
+// TestLoadRigTeamDefaults_NonRigTarget verifies nil return for non-rig targets.
+func TestLoadRigTeamDefaults_NonRigTarget(t *testing.T) {
+	townRoot := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(townRoot, "mayor", "rig"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	rigsJSON := `{"rigs":{}}`
+	if err := os.WriteFile(filepath.Join(townRoot, "mayor", "rigs.json"), []byte(rigsJSON), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cwd, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	_ = os.Chdir(filepath.Join(townRoot, "mayor", "rig"))
+
+	// "mayor" is not a rig
+	tc := loadRigTeamDefaults("mayor", townRoot)
+	if tc != nil {
+		t.Errorf("expected nil for non-rig target 'mayor', got %+v", tc)
+	}
+
+	// Empty target
+	tc2 := loadRigTeamDefaults("", townRoot)
+	if tc2 != nil {
+		t.Errorf("expected nil for empty target, got %+v", tc2)
+	}
+}
