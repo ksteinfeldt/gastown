@@ -16,6 +16,7 @@ import (
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/polecat"
 	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/slack"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/townlog"
@@ -626,6 +627,15 @@ notifyWitness:
 		style.PrintWarning("could not notify witness: %v", err)
 	} else {
 		fmt.Printf("%s Witness notified of %s\n", style.Bold.Render("✓"), exitType)
+	}
+
+	// Send Slack notification for PR created (if MR was created)
+	if mrID != "" {
+		slack.Notify(slack.EventPRCreated, map[string]string{
+			slack.FieldBead:   issueID,
+			slack.FieldBranch: branch,
+			slack.FieldMR:     mrID,
+		})
 	}
 
 	// Notify witness of work completion (witness is the polecat's direct supervisor).

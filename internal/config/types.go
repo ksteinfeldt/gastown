@@ -85,9 +85,27 @@ func NewTownSettings() *TownSettings {
 	return &TownSettings{
 		Type:         "town-settings",
 		Version:      CurrentTownSettingsVersion,
-		DefaultAgent: "claude",
+		DefaultAgent: "claude-sonnet", // Sonnet is the default for all roles
 		Agents:       make(map[string]*RuntimeConfig),
-		RoleAgents:   make(map[string]string),
+		RoleAgents:   DefaultRoleAgents(),
+	}
+}
+
+// DefaultRoleAgents returns the default role-to-agent mapping.
+// This implements tiered model assignment:
+// - Opus for oversight roles (Mayor, Deacon) - strategic decisions
+// - Sonnet for execution roles (Polecat, Dog, Witness, Refinery, Crew) - implementation
+func DefaultRoleAgents() map[string]string {
+	return map[string]string{
+		// Oversight roles use Opus (strategic decisions, planning)
+		"mayor":  "claude-opus",
+		"deacon": "claude-opus",
+		// Execution roles use Sonnet (implementation, standard work)
+		"polecat":  "claude-sonnet",
+		"witness":  "claude-sonnet",
+		"dog":      "claude-sonnet",
+		"refinery": "claude-sonnet",
+		"crew":     "claude-sonnet",
 	}
 }
 
@@ -335,6 +353,10 @@ type RigSettings struct {
 	// Overrides TownSettings.RoleAgents for this specific rig.
 	// Example: {"witness": "claude-haiku", "polecat": "claude-sonnet"}
 	RoleAgents map[string]string `json:"role_agents,omitempty"`
+
+	// Team configures default agent team settings for polecats in this rig.
+	// Can be overridden per-sling with --team / --no-team flags.
+	Team *TeamConfig `json:"team,omitempty"`
 }
 
 // CrewConfig represents crew workspace settings for a rig.
@@ -1086,5 +1108,143 @@ func NewEscalationConfig() *EscalationConfig {
 		Contacts:         EscalationContacts{},
 		StaleThreshold:   "4h",
 		MaxReescalations: intPtr(2),
+	}
+}
+
+// TeamConfig configures Claude Code's experimental agent teams feature.
+// When enabled, the polecat acts as team lead and can spawn teammate instances
+// that share a task list, message each other, and self-coordinate.
+type TeamConfig struct {
+	// Enabled activates agent teams for this polecat session.
+	Enabled bool `json:"enabled"`
+
+	// MaxTeammates limits the number of teammate instances (default 3).
+	MaxTeammates int `json:"max_teammates,omitempty"`
+
+	// TeammateModel specifies the model tier for teammates (e.g., "sonnet").
+	TeammateModel string `json:"teammate_model,omitempty"`
+
+	// DelegateMode enables Shift+Tab delegate mode for full delegation.
+	DelegateMode bool `json:"delegate_mode,omitempty"`
+}
+
+// CurrentBackendConfigVersion is the current schema version for BackendConfig.
+const CurrentBackendConfigVersion = 1
+
+// BackendConfig represents API backend configuration for hybrid routing.
+// This enables Gas Town to route lightweight tasks to direct API calls
+// while reserving CLI agents for complex multi-step work.
+type BackendConfig struct {
+	Type    string `json:"type"`    // "backend-config"
+	Version int    `json:"version"` // schema version
+
+	// Enabled is the master switch for hybrid routing.
+	// When false, all tasks route to CLI agents (default Gas Town behavior).
+	Enabled bool `json:"enabled"`
+
+	// DefaultBackend is the API backend to use when not specified.
+	// Valid values: "claude", "openai", "grok"
+	DefaultBackend string `json:"default_backend"`
+
+	// DefaultModel is the model to use within the default backend.
+	DefaultModel string `json:"default_model,omitempty"`
+
+	// CostThreshold is the maximum cost (USD) per task before routing to CLI.
+	// Tasks estimated to exceed this cost will route to CLI agents.
+	CostThreshold float64 `json:"cost_threshold"`
+
+	// TokenThreshold is the maximum estimated tokens before routing to CLI.
+	// Large context tasks automatically route to CLI agents.
+	TokenThreshold int `json:"token_threshold"`
+
+	// FallbackToCLI indicates whether to fall back to CLI on API errors.
+	// When true, API failures will retry with CLI agent instead of failing.
+	FallbackToCLI bool `json:"fallback_to_cli"`
+
+	// Backends configures individual API backends.
+	Backends map[string]*BackendEntry `json:"backends,omitempty"`
+
+	// Routing contains custom routing rules.
+	Routing *BackendRoutingConfig `json:"routing,omitempty"`
+}
+
+// BackendEntry configures a specific API backend.
+type BackendEntry struct {
+	// Enabled controls whether this backend is available.
+	Enabled bool `json:"enabled"`
+
+	// DefaultModel is the default model for this backend.
+	DefaultModel string `json:"default_model"`
+
+	// APIKeyEnv is the environment variable name for the API key.
+	APIKeyEnv string `json:"api_key_env"`
+
+	// RateLimitRPM is the rate limit in requests per minute.
+	RateLimitRPM int `json:"rate_limit_rpm,omitempty"`
+
+	// Models lists enabled models for this backend.
+	// If empty, all models are enabled.
+	Models map[string]bool `json:"models,omitempty"`
+}
+
+// BackendRoutingConfig contains custom routing rules.
+type BackendRoutingConfig struct {
+	// DefaultRoute is the default routing decision ("cli" or "api").
+	DefaultRoute string `json:"default_route"`
+
+	// Rules are custom routing rules applied in order.
+	Rules []BackendRoutingRule `json:"rules,omitempty"`
+}
+
+// BackendRoutingRule defines a custom routing condition.
+type BackendRoutingRule struct {
+	// Name identifies this rule for logging.
+	Name string `json:"name"`
+
+	// Match conditions (all must match)
+	TierMatch     []string `json:"tier_match,omitempty"`      // "haiku", "sonnet", "opus"
+	ModelTagMatch []string `json:"model_tag_match,omitempty"` // "grok-fast", "claude-haiku"
+	TypeMatch     []string `json:"type_match,omitempty"`      // Issue types
+
+	// Action
+	Route   string `json:"route"`             // "api" or "cli"
+	Backend string `json:"backend,omitempty"` // Backend name for API routes
+	Model   string `json:"model,omitempty"`   // Specific model override
+}
+
+// NewBackendConfig creates a new BackendConfig with sensible defaults.
+func NewBackendConfig() *BackendConfig {
+	return &BackendConfig{
+		Type:           "backend-config",
+		Version:        CurrentBackendConfigVersion,
+		Enabled:        false, // Opt-in
+		DefaultBackend: "claude",
+		DefaultModel:   "claude-haiku-3-5-20241022",
+		CostThreshold:  0.50,  // $0.50 max per API task
+		TokenThreshold: 50000, // 50k tokens before CLI
+		FallbackToCLI:  true,
+		Backends: map[string]*BackendEntry{
+			"claude": {
+				Enabled:      true,
+				DefaultModel: "claude-haiku-3-5-20241022",
+				APIKeyEnv:    "ANTHROPIC_API_KEY",
+				RateLimitRPM: 60,
+			},
+			"openai": {
+				Enabled:      false,
+				DefaultModel: "gpt-4o",
+				APIKeyEnv:    "OPENAI_API_KEY",
+				RateLimitRPM: 60,
+			},
+			"grok": {
+				Enabled:      false,
+				DefaultModel: "grok-2-mini",
+				APIKeyEnv:    "XAI_API_KEY",
+				RateLimitRPM: 60,
+			},
+		},
+		Routing: &BackendRoutingConfig{
+			DefaultRoute: "cli",
+		},
 	}
 }

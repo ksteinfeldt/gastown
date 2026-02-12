@@ -69,6 +69,10 @@ type SessionStartOptions struct {
 	// DoltBranch is the polecat-specific Dolt branch for write isolation.
 	// If set, BD_BRANCH env var is injected into the polecat session.
 	DoltBranch string
+
+	// TeamConfig enables Claude Code's experimental agent teams feature.
+	// When set and Enabled, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 is injected.
+	TeamConfig *config.TeamConfig
 }
 
 // SessionInfo contains information about a running polecat session.
@@ -230,6 +234,14 @@ func (m *SessionManager) Start(polecat string, opts SessionStartOptions) error {
 	// under concurrent load (gt-5cc2p). Changes merge at gt done time.
 	command = config.PrependEnv(command, map[string]string{"BD_DOLT_AUTO_COMMIT": "off"})
 
+	// Agent teams: inject experimental flag so Claude Code enables teammate spawning.
+	// Uses in-process display mode to avoid tmux nesting issues.
+	if opts.TeamConfig != nil && opts.TeamConfig.Enabled {
+		command = config.PrependEnv(command, map[string]string{
+			"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+		})
+	}
+
 	// Create session with command directly to avoid send-keys race condition.
 	// See: https://github.com/anthropics/gastown/issues/280
 	if err := m.tmux.NewSessionWithCommand(sessionID, workDir, command); err != nil {
@@ -259,6 +271,12 @@ func (m *SessionManager) Start(polecat string, opts SessionStartOptions) error {
 	// Disable Dolt auto-commit in tmux session environment (gt-5cc2p).
 	// This ensures respawned processes also inherit the setting.
 	debugSession("SetEnvironment BD_DOLT_AUTO_COMMIT", m.tmux.SetEnvironment(sessionID, "BD_DOLT_AUTO_COMMIT", "off"))
+
+	// Agent teams: set tmux env so respawned processes also inherit the flag.
+	if opts.TeamConfig != nil && opts.TeamConfig.Enabled {
+		debugSession("SetEnvironment CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+			m.tmux.SetEnvironment(sessionID, "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1"))
+	}
 
 	// Hook the issue to the polecat if provided via --issue flag
 	if opts.Issue != "" {
@@ -306,6 +324,16 @@ func (m *SessionManager) Start(polecat string, opts SessionStartOptions) error {
 			// Send work instructions via nudge
 			debugSession("SendStartupNudge", m.tmux.NudgeSession(sessionID, runtime.StartupNudgeContent()))
 		}
+	}
+
+	// Agent teams: send team context nudge so polecat knows its team capabilities.
+	if opts.TeamConfig != nil && opts.TeamConfig.Enabled {
+		teamNudge := fmt.Sprintf("[TEAM MODE] You have agent teams enabled. "+
+			"Max teammates: %d. Teammate model: %s. "+
+			"Use Shift+Tab to delegate tasks to teammates. "+
+			"Only YOU (the lead polecat) can run `gt done`.",
+			opts.TeamConfig.MaxTeammates, opts.TeamConfig.TeammateModel)
+		debugSession("SendTeamNudge", m.tmux.NudgeSession(sessionID, teamNudge))
 	}
 
 	// Legacy fallback for other startup paths (non-fatal)

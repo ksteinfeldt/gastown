@@ -1972,3 +1972,145 @@ func (c *EscalationConfig) GetMaxReescalations() int {
 	}
 	return *c.MaxReescalations
 }
+
+// BackendConfigPath returns the path to town-level backend config.
+func BackendConfigPath(townRoot string) string {
+	return filepath.Join(townRoot, "settings", "backend.json")
+}
+
+// RigBackendConfigPath returns the path to rig-level backend config.
+func RigBackendConfigPath(rigPath string) string {
+	return filepath.Join(rigPath, "settings", "backend.json")
+}
+
+// LoadBackendConfig loads backend configuration from a JSON file.
+func LoadBackendConfig(path string) (*BackendConfig, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path is from config
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // Not configured
+		}
+		return nil, fmt.Errorf("reading backend config: %w", err)
+	}
+
+	var c BackendConfig
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil, fmt.Errorf("parsing backend config: %w", err)
+	}
+
+	return &c, nil
+}
+
+// LoadOrCreateBackendConfig loads backend config or creates a default.
+func LoadOrCreateBackendConfig(path string) (*BackendConfig, error) {
+	c, err := LoadBackendConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	if c != nil {
+		return c, nil
+	}
+
+	// Create default config
+	c = NewBackendConfig()
+	if err := SaveBackendConfig(path, c); err != nil {
+		return nil, fmt.Errorf("creating default backend config: %w", err)
+	}
+
+	return c, nil
+}
+
+// SaveBackendConfig writes backend configuration to a JSON file.
+func SaveBackendConfig(path string, c *BackendConfig) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling backend config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil { //nolint:gosec // G306: config file
+		return fmt.Errorf("writing backend config: %w", err)
+	}
+
+	return nil
+}
+
+// ResolveBackendConfig loads and merges town + rig backend configs.
+// Rig config takes precedence over town config.
+func ResolveBackendConfig(townRoot, rigPath string) *BackendConfig {
+	// Start with defaults
+	result := NewBackendConfig()
+
+	// Load town-level config
+	if townRoot != "" {
+		townConfig, err := LoadBackendConfig(BackendConfigPath(townRoot))
+		if err == nil && townConfig != nil {
+			// Merge town config
+			result = mergeBackendConfig(result, townConfig)
+		}
+	}
+
+	// Load rig-level config (overrides town)
+	if rigPath != "" {
+		rigConfig, err := LoadBackendConfig(RigBackendConfigPath(rigPath))
+		if err == nil && rigConfig != nil {
+			// Merge rig config
+			result = mergeBackendConfig(result, rigConfig)
+		}
+	}
+
+	return result
+}
+
+// mergeBackendConfig merges two backend configs (right takes precedence).
+func mergeBackendConfig(base, override *BackendConfig) *BackendConfig {
+	if override == nil {
+		return base
+	}
+	if base == nil {
+		return override
+	}
+
+	result := &BackendConfig{
+		Type:           "backend-config",
+		Version:        CurrentBackendConfigVersion,
+		Enabled:        override.Enabled,
+		DefaultBackend: override.DefaultBackend,
+		DefaultModel:   override.DefaultModel,
+		CostThreshold:  override.CostThreshold,
+		TokenThreshold: override.TokenThreshold,
+		FallbackToCLI:  override.FallbackToCLI,
+		Backends:       make(map[string]*BackendEntry),
+		Routing:        override.Routing,
+	}
+
+	// Use base defaults if override is empty
+	if result.DefaultBackend == "" {
+		result.DefaultBackend = base.DefaultBackend
+	}
+	if result.DefaultModel == "" {
+		result.DefaultModel = base.DefaultModel
+	}
+	if result.CostThreshold == 0 {
+		result.CostThreshold = base.CostThreshold
+	}
+	if result.TokenThreshold == 0 {
+		result.TokenThreshold = base.TokenThreshold
+	}
+	if result.Routing == nil {
+		result.Routing = base.Routing
+	}
+
+	// Merge backends (copy base first, then override)
+	for name, entry := range base.Backends {
+		result.Backends[name] = entry
+	}
+	for name, entry := range override.Backends {
+		result.Backends[name] = entry
+	}
+
+	return result
+}

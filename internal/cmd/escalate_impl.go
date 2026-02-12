@@ -13,6 +13,7 @@ import (
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/events"
 	"github.com/steveyegge/gastown/internal/mail"
+	"github.com/steveyegge/gastown/internal/slack"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
@@ -138,6 +139,13 @@ func runEscalate(cmd *cobra.Command, args []string) error {
 		payload["source"] = escalateSource
 	}
 	_ = events.LogFeed(events.TypeEscalationSent, agentID, payload)
+
+	// Send Slack notification for escalation
+	slack.Notify(slack.EventEscalation, map[string]string{
+		slack.FieldBead:        issue.ID,
+		slack.FieldSeverity:    severity,
+		slack.FieldDescription: description,
+	})
 
 	// Output
 	if escalateJSON {
