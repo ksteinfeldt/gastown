@@ -19,6 +19,10 @@ type Rig struct {
 	// LocalRepo is an optional local repository used for reference clones.
 	LocalRepo string `json:"local_repo,omitempty"`
 
+	// Owner is the username of the user who owns this rig (multi-overseer).
+	// Empty for legacy single-overseer installations.
+	Owner string `json:"owner,omitempty"`
+
 	// Config is the rig-level configuration.
 	Config *config.BeadsConfig `json:"config,omitempty"`
 
@@ -52,6 +56,7 @@ var AgentDirs = []string{
 // RigSummary provides a concise overview of a rig.
 type RigSummary struct {
 	Name         string `json:"name"`
+	Owner        string `json:"owner,omitempty"`
 	PolecatCount int    `json:"polecat_count"`
 	CrewCount    int    `json:"crew_count"`
 	HasWitness   bool   `json:"has_witness"`
@@ -62,6 +67,7 @@ type RigSummary struct {
 func (r *Rig) Summary() RigSummary {
 	return RigSummary{
 		Name:         r.Name,
+		Owner:        r.Owner,
 		PolecatCount: len(r.Polecats),
 		CrewCount:    len(r.Crew),
 		HasWitness:   r.HasWitness,

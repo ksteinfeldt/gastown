@@ -284,6 +284,10 @@ type RigEntry struct {
 	LocalRepo   string       `json:"local_repo,omitempty"`
 	AddedAt     time.Time    `json:"added_at"`
 	BeadsConfig *BeadsConfig `json:"beads,omitempty"`
+
+	// Owner is the username of the user who owns this rig (multi-overseer).
+	// Empty for legacy single-overseer installations.
+	Owner string `json:"owner,omitempty"`
 }
 
 // BeadsConfig represents beads configuration for a rig.
@@ -315,6 +319,10 @@ type RigConfig struct {
 	LocalRepo string       `json:"local_repo,omitempty"`
 	CreatedAt time.Time    `json:"created_at"` // when the rig was created
 	Beads     *BeadsConfig `json:"beads,omitempty"`
+
+	// Owner is the username of the user who owns this rig (multi-overseer).
+	// Empty for legacy single-overseer installations.
+	Owner string `json:"owner,omitempty"`
 }
 
 // WorkflowConfig represents workflow settings for a rig.

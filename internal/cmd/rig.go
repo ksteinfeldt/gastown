@@ -23,6 +23,7 @@ import (
 	"github.com/steveyegge/gastown/internal/rig"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
+	"github.com/steveyegge/gastown/internal/user"
 	"github.com/steveyegge/gastown/internal/wisp"
 	"github.com/steveyegge/gastown/internal/witness"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -376,6 +377,9 @@ func runRigAdd(cmd *cobra.Command, args []string) error {
 
 	startTime := time.Now()
 
+	// Determine rig owner from current user context (multi-overseer)
+	rigOwner, _ := user.GetCurrentUser()
+
 	// Add the rig
 	newRig, err := mgr.AddRig(rig.AddRigOptions{
 		Name:          name,
@@ -383,6 +387,7 @@ func runRigAdd(cmd *cobra.Command, args []string) error {
 		BeadsPrefix:   rigAddPrefix,
 		LocalRepo:     rigAddLocalRepo,
 		DefaultBranch: rigAddBranch,
+		Owner:         rigOwner,
 	})
 	if err != nil {
 		return fmt.Errorf("adding rig: %w", err)
@@ -511,7 +516,11 @@ func runRigList(cmd *cobra.Command, args []string) error {
 		}
 
 		summary := r.Summary()
-		fmt.Printf("  %s\n", style.Bold.Render(name))
+		if summary.Owner != "" {
+			fmt.Printf("  %s (%s)\n", style.Bold.Render(name), summary.Owner)
+		} else {
+			fmt.Printf("  %s\n", style.Bold.Render(name))
+		}
 		fmt.Printf("    Polecats: %d  Crew: %d\n", summary.PolecatCount, summary.CrewCount)
 
 		agents := []string{}
@@ -613,12 +622,16 @@ func runRigAdopt(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid git URL %q: expected a remote URL (https://, git@, ssh://, git://)", rigAddAdoptURL)
 	}
 
+	// Determine rig owner from current user context (multi-overseer)
+	rigOwner, _ := user.GetCurrentUser()
+
 	// Register the existing rig
 	result, err := mgr.RegisterRig(rig.RegisterRigOptions{
 		Name:        name,
 		GitURL:      rigAddAdoptURL,
 		BeadsPrefix: rigAddPrefix,
 		Force:       rigAddAdoptForce,
+		Owner:       rigOwner,
 	})
 	if err != nil {
 		return fmt.Errorf("adopting rig: %w", err)

@@ -28,6 +28,11 @@ func OverseerConfigPath(townRoot string) string {
 	return filepath.Join(townRoot, "mayor", "overseer.json")
 }
 
+// RigsConfigPath returns the standard path for the rigs registry in a town.
+func RigsConfigPath(townRoot string) string {
+	return filepath.Join(townRoot, "mayor", "rigs.json")
+}
+
 // LoadOverseerConfig loads and validates an overseer configuration file.
 func LoadOverseerConfig(path string) (*OverseerConfig, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path is constructed internally, not from user input

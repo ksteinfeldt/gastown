@@ -83,6 +83,7 @@ type RigConfig struct {
 	GitURL        string       `json:"git_url"`                  // repository URL
 	LocalRepo     string       `json:"local_repo,omitempty"`     // optional local reference repo
 	DefaultBranch string       `json:"default_branch,omitempty"` // main, master, etc.
+	Owner         string       `json:"owner,omitempty"`          // user who owns this rig (multi-overseer)
 	CreatedAt     time.Time    `json:"created_at"`               // when rig was created
 	Beads         *BeadsConfig `json:"beads,omitempty"`
 }
@@ -163,6 +164,7 @@ func (m *Manager) loadRig(name string, entry config.RigEntry) (*Rig, error) {
 		Path:      rigPath,
 		GitURL:    entry.GitURL,
 		LocalRepo: entry.LocalRepo,
+		Owner:     entry.Owner,
 		Config:    entry.BeadsConfig,
 	}
 
@@ -219,6 +221,7 @@ type AddRigOptions struct {
 	BeadsPrefix   string // Beads issue prefix (defaults to derived from name)
 	LocalRepo     string // Optional local repo for reference clones
 	DefaultBranch string // Default branch (defaults to auto-detected from remote)
+	Owner         string // Username of the user who owns this rig (multi-overseer)
 }
 
 func resolveLocalRepo(path, gitURL string) (string, string) {
@@ -326,6 +329,7 @@ func (m *Manager) AddRig(opts AddRigOptions) (*Rig, error) {
 		Name:      opts.Name,
 		GitURL:    opts.GitURL,
 		LocalRepo: localRepo,
+		Owner:     opts.Owner,
 		CreatedAt: time.Now(),
 		Beads: &BeadsConfig{
 			Prefix: opts.BeadsPrefix,
@@ -582,6 +586,7 @@ Use crew for your own workspace. Polecats are for batch work dispatch.
 		GitURL:    opts.GitURL,
 		LocalRepo: localRepo,
 		AddedAt:   time.Now(),
+		Owner:     opts.Owner,
 		BeadsConfig: &config.BeadsConfig{
 			Prefix: opts.BeadsPrefix,
 		},
@@ -1017,6 +1022,7 @@ type RegisterRigOptions struct {
 	GitURL      string // Override git URL (auto-detected from origin if empty)
 	BeadsPrefix string // Beads issue prefix (defaults to derived from name or existing config)
 	Force       bool   // Register even if directory structure looks incomplete
+	Owner       string // Username of the user who owns this rig (multi-overseer)
 }
 
 // RegisterRigResult contains the result of registering a rig.
@@ -1100,6 +1106,7 @@ func (m *Manager) RegisterRig(opts RegisterRigOptions) (*RegisterRigResult, erro
 	m.config.Rigs[opts.Name] = config.RigEntry{
 		GitURL:  result.GitURL,
 		AddedAt: time.Now(),
+		Owner:   opts.Owner,
 		BeadsConfig: &config.BeadsConfig{
 			Prefix: result.BeadsPrefix,
 		},
